@@ -3,7 +3,9 @@ import {
     DynamoDBDocumentClient,
     ScanCommand,
     PutCommand,
-    DeleteCommand
+    DeleteCommand,
+    UpdateCommand,
+    GetCommand
 } from "@aws-sdk/lib-dynamodb";
 
 const client = new DynamoDBClient({});
@@ -74,60 +76,52 @@ async function saveQuote(data) {
     
 }
 
-//async function deleteQuote(id) {
-//    const params = {
-//        TableName: MY_TABLE,
-//        Key: {
-//            id: id,
-//        },
-//    };
-//    return DynamoDBClient
-//        .delete(params)
-//        .promise()
-//        .then(() => {
-//            return id;
-//        });
-//}
 
-//async function updateQuote(id, data) {
-//    const datetime = new Date().toISOString();
-//    const params = {
-//        TableName: MY_TABLE,
-//        Key: {
-//            id: id,
-//        },
 
-//        ExpressionAttributeValues: {
-//            ":quote": data.quote,
-//            ":author": data.author,
-//            ":updatedAt": datetime,
-//        },
-//        UpdateExpression:
-//            "SET quote = :quote, author = :author, updatedAt = :updatedAt",
-//        ReturnValues: "UPDATED_NEW",
-//    };
-//    await DynamoDBClient
-//        .update(params)
-//        .promise()
-//        .then(() => {
-//            return "Item updated!";
-//        });
-//}
+async function updateQuote(id, data) {
+    const params = {
+        TableName: process.env.MY_TABLE,
+        Key: {
+            id: id,
+        },
 
-//async function getQuote(id) {
-//    const params = {
-//        TableName: MY_TABLE,
-//        Key: {
-//            id: id,
-//        },
-//    };
-//    return dynamo
-//        .get(params)
-//        .promise()
-//        .then((item) => {
-//            return item.Item;
-//        });
-//}
+        UpdateExpression: "SET quote = :q, author = :a",
+
+        ExpressionAttributeValues: {
+            ":q": data.quote,
+            ":a": data.author
+        },
+        ReturnValues: "ALL_OLD",
+    };
+
+    try {
+        const result = await dnclient.send(new UpdateCommand(params));
+        return `${result.Attributes['id']} updated`;
+
+    } catch (err) {
+        throw new Error(err.message);
+    }
+}
+
+async function getQuoteById(id) {
+    const params = {
+        TableName: process.env.MY_TABLE, 
+        Key: {
+            id: id
+        }
+    };
+
+    try {
+        const result = await dnclient.send(new GetCommand(params));
+        if (!result.Item) {
+            return null;
+        }
+        return result.Item;
+    } catch (err) {
+        throw err;
+    }
+}
+
 
 export const handler = async (event) => {
   const path = event.resource;
@@ -150,12 +144,12 @@ export const handler = async (event) => {
        case "DELETE /quotes/{id}":
             body = await deleteItem(event.pathParameters.id);
             break;
-      //  case "PUT /quotes/{id}":
-      //      body = await updateQuote(event.pathParameters.id, data);
-      //      break;
-      //  case "GET /quotes/{id}":
-      //      body = await getQuote(event.pathParameters.id);
-      //      break;
+       case "PUT /quotes/{id}":
+            body = await updateQuote(event.pathParameters.id, data);
+            break;
+        case "GET /quotes/{id}":
+            body = await getQuoteById(event.pathParameters.id);
+            break;
       default:
         statusCode = 404;
         body = "Route not found";
